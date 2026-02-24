@@ -105,4 +105,117 @@ public class UserService {
         examRecordMapper.deleteByUserId(userId);
         return userMapper.deleteById(userId) > 0;
     }
+
+    public User findByEmail(String email) {
+        return userMapper.findByEmail(email);
+    }
+
+    public User findByPhone(String phone) {
+        return userMapper.findByPhone(phone);
+    }
+
+    public void updatePasswordByEmail(String email, String newPassword) {
+        if (!ValidationUtil.isValidPassword(newPassword)) {
+            throw new IllegalArgumentException("密码长度至少8位");
+        }
+        User user = findByEmail(email);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        String encoded = PasswordUtil.encode(newPassword);
+        userMapper.updatePassword(user.getId(), encoded);
+    }
+
+    // 7.1 修改密码（需旧密码验证）
+    public void updatePasswordWithOld(Integer userId, String oldPassword, String newPassword) {
+        User user = userMapper.findById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        
+        // 验证旧密码
+        if (!PasswordUtil.matches(oldPassword, user.getPassword())) {
+            throw new IllegalArgumentException("旧密码错误");
+        }
+        
+        // 验证新密码格式
+        if (!ValidationUtil.isValidPassword(newPassword)) {
+            throw new IllegalArgumentException("密码长度至少8位");
+        }
+        
+        String encoded = PasswordUtil.encode(newPassword);
+        userMapper.updatePassword(userId, encoded);
+    }
+
+    // 7.2 修改昵称
+    public void updateNickname(Integer userId, String nickname) {
+        if (!ValidationUtil.isValidNickname(nickname)) {
+            throw new IllegalArgumentException("昵称格式不正确（1-50位字符）");
+        }
+        
+        User existingUser = userMapper.findByNickname(nickname);
+        if (existingUser != null && !existingUser.getId().equals(userId)) {
+            throw new IllegalArgumentException("昵称已被使用");
+        }
+        
+        userMapper.updateNickname(userId, nickname);
+    }
+
+    // 7.3 绑定手机
+    public void updatePhone(Integer userId, String phone) {
+        if (phone != null && !ValidationUtil.isValidPhone(phone)) {
+            throw new IllegalArgumentException("手机号格式不正确");
+        }
+        
+        // 检查手机号是否被其他用户使用
+        User existingUser = userMapper.findByPhone(phone);
+        if (existingUser != null && !existingUser.getId().equals(userId)) {
+            throw new IllegalArgumentException("手机号已被其他用户绑定");
+        }
+        
+        userMapper.updatePhone(userId, phone);
+    }
+
+    // 7.5 绑定邮箱
+    public void updateEmail(Integer userId, String email) {
+        if (email != null && !ValidationUtil.isValidEmail(email)) {
+            throw new IllegalArgumentException("邮箱格式不正确");
+        }
+        
+        // 检查邮箱是否被其他用户使用
+        User existingUser = userMapper.findByEmail(email);
+        if (existingUser != null && !existingUser.getId().equals(userId)) {
+            throw new IllegalArgumentException("邮箱已被其他用户绑定");
+        }
+        
+        userMapper.updateEmail(userId, email);
+    }
+
+    // 解绑手机（确保还有邮箱）
+    public void unbindPhone(Integer userId) {
+        User user = userMapper.findById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("必须保留至少一种联系方式，当前无邮箱可用");
+        }
+        
+        userMapper.updatePhone(userId, null);
+    }
+
+    // 解绑邮箱（确保还有手机）
+    public void unbindEmail(Integer userId) {
+        User user = userMapper.findById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        
+        if (user.getPhone() == null || user.getPhone().trim().isEmpty()) {
+            throw new IllegalArgumentException("必须保留至少一种联系方式，当前无手机可用");
+        }
+        
+        userMapper.updateEmail(userId, null);
+    }
 }

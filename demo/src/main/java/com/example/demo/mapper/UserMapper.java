@@ -28,4 +28,19 @@ public interface UserMapper {
 
     @Delete("DELETE FROM user WHERE id = #{id}")
     int deleteById(Integer id);
+
+    @Update("UPDATE user SET password = #{password} WHERE id = #{id}")
+    int updatePassword(@Param("id") Integer id, @Param("password") String password);
+
+    @Select("SELECT * FROM user WHERE id = #{id}")
+    User findById(Integer id);
+
+    @Update("UPDATE user SET nickname = #{nickname} WHERE id = #{id}")
+    int updateNickname(@Param("id") Integer id, @Param("nickname") String nickname);
+
+    @Update("UPDATE user SET phone = #{phone} WHERE id = #{id}")
+    int updatePhone(@Param("id") Integer id, @Param("phone") String phone);
+
+    @Update("UPDATE user SET email = #{email} WHERE id = #{id}")
+    int updateEmail(@Param("id") Integer id, @Param("email") String email);
 }
