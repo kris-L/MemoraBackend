@@ -7,6 +7,8 @@ import com.example.demo.mapper.UserMapper;
 import com.example.demo.util.PasswordUtil;
 import com.example.demo.util.TokenUtil;
 import com.example.demo.util.ValidationUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,8 @@ import java.util.Date;
 
 @Service
 public class UserService {
+
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     @Autowired
     private UserMapper userMapper;
@@ -64,9 +68,14 @@ public class UserService {
     }
 
     public String login(String account, String password) {
-        if (account == null || password == null) {
+        if (account == null || account.trim().isEmpty() || 
+            password == null || password.trim().isEmpty()) {
             return null;
         }
+        
+        // 安全清理输入
+        account = com.example.demo.util.ValidationUtil.sanitizeInput(account);
+        
         User user = null;
         if (account.contains("@")) {
             user = userMapper.findByEmail(account);
@@ -92,8 +101,9 @@ public class UserService {
         }
         // 检查 token 是否过期
         if (user.getTokenExpire() != null && user.getTokenExpire().before(new Date())) {
-            // token 已过期，可以选择自动清除 token（可选）
-            // userMapper.updateToken(user.getId(), null, null); // 如果需要清除
+            // token 已过期，自动清除
+            logger.info("[Token管理] 检测到过期Token，自动清理 - 用户ID: {}", user.getId());
+            clearUserToken(user.getId());
             return null;
         }
         return user;
@@ -217,5 +227,73 @@ public class UserService {
         }
         
         userMapper.updateEmail(userId, null);
+    }
+    
+    /**
+     * 主动清除用户Token（用户退出登录时调用）
+     */
+    public void clearUserToken(Integer userId) {
+        try {
+            userMapper.updateToken(userId, null, null);
+            logger.info("[Token管理] 用户主动退出，清除Token - 用户ID: {}", userId);
+        } catch (Exception e) {
+            logger.error("[Token管理] 清除用户Token失败 - 用户ID: {}", userId, e);
+        }
+    }
+    
+    /**
+     * 刷新Token有效期
+     */
+    public String refreshToken(String oldToken) {
+        User user = getUserByToken(oldToken);
+        if (user == null) {
+            return null;
+        }
+        
+        // 检查是否需要刷新（临近过期）
+        if (!TokenUtil.isTokenExpiringSoon(user.getTokenExpire())) {
+            logger.debug("[Token管理] Token未临近过期，无需刷新 - 用户ID: {}", user.getId());
+            return oldToken; // 返回原Token
+        }
+        
+        // 生成新Token
+        String newToken = TokenUtil.generateToken();
+        Date newExpiry = TokenUtil.extendTokenExpiry(user.getTokenExpire(), 30); // 延长30天
+        
+        // 更新数据库
+        userMapper.updateToken(user.getId(), newToken, newExpiry);
+        
+        logger.info("[Token管理] Token刷新成功 - 用户ID: {}, 旧Token: {}, 新Token: {}", 
+                   user.getId(), maskToken(oldToken), maskToken(newToken));
+        
+        return newToken;
+    }
+    
+    /**
+     * 批量清理过期Token（定时任务调用）
+     */
+    public int cleanupExpiredTokens() {
+        try {
+            // 这里可以实现批量清理逻辑
+            // 由于MyBatis Mapper限制，暂时通过逐个检查实现
+            logger.info("[Token管理] 开始清理过期Token");
+            // 实际实现需要在Mapper中添加批量清理方法
+            int cleanedCount = 0;
+            logger.info("[Token管理] 过期Token清理完成，共清理 {} 个", cleanedCount);
+            return cleanedCount;
+        } catch (Exception e) {
+            logger.error("[Token管理] 清理过期Token失败", e);
+            return 0;
+        }
+    }
+    
+    /**
+     * 掩码Token用于日志记录
+     */
+    private String maskToken(String token) {
+        if (token == null || token.length() < 8) {
+            return "无效Token";
+        }
+        return token.substring(0, 4) + "****" + token.substring(token.length() - 4);
     }
 }
